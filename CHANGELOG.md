@@ -2,6 +2,24 @@
 
 All notable changes to `filament-tree-table` will be documented in this file.
 
+## v1.2.0 - 2026-06-17
+
+### Added
+
+- **`defaultSort()`** — set the default order for sibling rows by column name or a `Closure(Builder $query, string $direction)`, e.g. order by a related/computed value instead of the primary key.
+- **`flattenOnFilter()` / `flattenOnSearch()`** — choose whether an active filter or search drops the tree for a flat list. Both default to `true` (previous behaviour); set to `false` to keep the hierarchy.
+- **Ancestor-inclusive filtering & search** — when the tree is kept while filtering/searching, a matching row is shown together with its ancestor path (auto-expanded), so a match buried in a collapsed branch still surfaces. Non-matching ancestors are dimmed as context (`.ftt-context`), the way a file-tree search greys the folder path.
+
+### Fixed
+
+- **Column sort now works inside the tree** — sibling ordering delegates to the column's own sort, so `->sortable(query: ...)` closures and relationship/computed columns are honoured instead of being silently ignored.
+- **Filter-driven expansion is consistent** — while a filter/search auto-expands the tree, the per-row chevrons are non-interactive and the expand/collapse-all actions hide, so the chevron state can no longer disagree with what is rendered.
+- **No more infinite recursion / out-of-memory** when searching with the tree kept (the ancestor lookup reached back into the table query).
+
+### Note
+
+- The `HasExpandableRows` contract gained a few methods (used by the tree internals). Implementations using the `InteractsWithExpandableRows` trait — the documented setup — get them automatically and need no changes.
+
 ## v1.1.0 - 2026-06-17
 
 - **Tree toggle column pinned first & hidden from the column manager** — the chevron column no longer shows up in the `toggleableColumns()` / `reorderableColumns()` panel (where it appeared as a nameless, draggable row) and can no longer be reordered or pushed to the back by a persisted column order. It always renders as the first column.

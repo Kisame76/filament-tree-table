@@ -14,7 +14,8 @@ parents, expand them with a chevron, and render the sub-rows inline as real tabl
 rows — search and filter stay correct, and you get expand-all / collapse-all buttons.
 
 - ✅ Inline expandable rows that keep all your existing columns
-- ✅ Search / filter aware — when filtering, the tree flattens so nothing hides behind a collapsed parent
+- ✅ Search / filter aware — flatten to a flat match list, **or** keep the tree and reveal each match with its ancestor path (auto-expanded, non-matching ancestors dimmed as context)
+- ✅ Custom sibling ordering — `defaultSort()` plus full `->sortable(query: ...)` / relationship-column support inside the tree
 - ✅ Clear sub-rows without forcing an icon convention: a corner-arrow glyph on children and/or a coloured accent bar (+ optional per-depth tint) — mix or switch, fully themeable
 - ✅ Expand-all / collapse-all header actions
 - ✅ Database-agnostic ordering (Postgres / MySQL / SQLite)
@@ -117,6 +118,10 @@ ExpandableRows::make()
     ->expandAllAction(true)
     ->collapseAllAction(true)
     ->flattenOnSort(false)                          // false (default): sort hierarchically, keep tree; true: flat sorted list
+    ->flattenOnFilter(true)                         // true (default): a filter flattens the tree; false: keep the tree + reveal matches with ancestors
+    ->flattenOnSearch(true)                         // true (default): a search flattens the tree; false: keep the tree + reveal matches with ancestors
+    ->defaultSort('sort')                           // default sibling order: a column name...
+    ->defaultSort(fn ($query, $direction) => $query->orderBy('sort', $direction)) // ...or a closure (order by a related/computed value)
     ->applyTo($table);
 ```
 
@@ -136,15 +141,21 @@ All visuals are driven by CSS variables — override them in your panel theme:
 
 ## How it works / caveats
 
-- **Filtering / search:** while any filter or search is active the table shows a flat
-  list of every match (no tree restriction) so children behind collapsed parents are
-  still found; chevrons are hidden in that mode.
-- **Pagination** counts the visible tree rows; page sizes shift as you expand. For very
-  deep trees consider `->paginated(false)`.
-- **Sorting:** with `flattenOnSort(false)` (default) a column sort is applied
-  hierarchically — it orders each sibling group while keeping the tree grouped under its
-  parent (Jira-style). Set `flattenOnSort(true)` to drop the tree and show a flat sorted
-  list. (A relationship/computed sort column falls back to natural order.)
+- **Filtering / search:** by default (`flattenOnFilter(true)` / `flattenOnSearch(true)`)
+  an active filter or search drops the tree and shows a flat list of every match, so
+  nothing stays hidden behind a collapsed parent. Set either to `false` to keep the tree —
+  matches are then shown together with their ancestor path (auto-expanded), and the
+  non-matching ancestors are dimmed via the `.ftt-context` class (style it in your theme).
+  While a filter/search drives the expansion the chevrons are non-interactive and the
+  expand/collapse-all actions hide, so the displayed state can't be toggled out of sync.
+- **Pagination** counts the visible tree rows; page sizes shift as you expand, and a
+  branch can span a page boundary. For very deep trees consider `->paginated(false)`.
+- **Sorting:** a column sort is delegated to the column itself, so `->sortable(query: ...)`
+  closures and relationship/computed columns order the tree exactly as they would a flat
+  table. Use `defaultSort()` for the sibling order when no column sort is active. With
+  `flattenOnSort(false)` (default) the sort stays hierarchical — each sibling group follows
+  the column while keeping the tree grouped under its parent (Jira-style); set
+  `flattenOnSort(true)` to drop the tree and show a flat sorted list.
 - **Stepping:** `grid(false)` removes the per-level indentation (flat rows); the hierarchy
   is then shown only by `accentBar`/`depthTint`. `grid` and `cornerArrow` are independent.
 - **Column manager:** the chevron toggle column is kept out of the column-manager panel
