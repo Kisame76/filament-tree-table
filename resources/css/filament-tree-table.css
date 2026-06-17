@@ -42,14 +42,26 @@
     border-radius: 4px;
 }
 
-.ftt-chevron:hover {
+button.ftt-chevron:hover {
     opacity: 1;
     background-color: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* Non-interactive chevron: expansion is driven by an active filter/search, so the row
+   shows its (auto-expanded) state but cannot be toggled. */
+span.ftt-chevron {
+    cursor: default;
 }
 
 .ftt-chevron svg {
     width: 1rem;
     height: 1rem;
+}
+
+/* Rows shown only as the path to a filter/search match — context, not matches. Dimmed so
+   it reads as "where the match lives", the way a file-tree search greys the folder path. */
+.ftt-context > td {
+    opacity: 0.5;
 }
 
 .ftt-arrow {

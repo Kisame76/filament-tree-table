@@ -13,6 +13,8 @@ return new class extends Migration
         Schema::create('nodes', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
+            $table->integer('priority')->default(0);
+            $table->boolean('archived')->default(false);
             $table->foreignId('parent_id')->nullable()->constrained('nodes');
             $table->timestamps();
         });

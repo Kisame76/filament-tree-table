@@ -6,6 +6,7 @@ namespace Kisame76\FilamentTreeTable\Concerns;
 
 use Filament\Tables\Columns\Column;
 use Filament\Tables\Concerns\HasColumnManager;
+use Illuminate\Database\Eloquent\Builder;
 use Kisame76\FilamentTreeTable\Contracts\HasExpandableRows;
 use Kisame76\FilamentTreeTable\ExpandableRows;
 
@@ -45,6 +46,38 @@ trait InteractsWithExpandableRows
      * @var array<string, int>
      */
     protected array $treeRowDepthMap = [];
+
+    /**
+     * When true the table's own filter/search pass is skipped for the current query
+     * build. Set by the tree while resolving an ancestor-inclusive filtered view, where
+     * it has already applied the filters itself and pulled in matching rows' ancestors;
+     * the outer pass must not strip those (non-matching) ancestors back out. Not
+     * persisted — recomputed on every query build.
+     */
+    protected bool $treeSuppressFilterApplication = false;
+
+    /**
+     * Lookup of the keys expanded in the current render (user expansions plus any ancestors
+     * the tree auto-expanded for filter matches). Render-scoped, keyed by string for O(1)
+     * chevron-state lookups.
+     *
+     * @var array<string, true>
+     */
+    protected array $treeEffectiveExpandedKeys = [];
+
+    /**
+     * True while row expansion is driven by an active filter/search (auto-expanded). The
+     * chevrons go non-interactive and the expand/collapse-all actions hide. Render-scoped.
+     */
+    protected bool $treeExpansionLocked = false;
+
+    /**
+     * Lookup of rows shown only as the path to a match (non-matching ancestors), dimmed as
+     * context. Render-scoped, keyed by string.
+     *
+     * @var array<string, true>
+     */
+    protected array $treeContextKeys = [];
 
     public function toggleRowExpansion(int|string $recordKey): void
     {
@@ -127,6 +160,70 @@ trait InteractsWithExpandableRows
     public function setExpandableParentKeys(array $parentKeys): void
     {
         $this->expandableParentKeys = array_values(array_map('strval', $parentKeys));
+    }
+
+    public function setSuppressTableFilters(bool $suppress): void
+    {
+        $this->treeSuppressFilterApplication = $suppress;
+    }
+
+    /**
+     * @param  array<int, int|string>  $keys
+     */
+    public function setEffectiveExpandedKeys(array $keys): void
+    {
+        $this->treeEffectiveExpandedKeys = array_fill_keys(array_map('strval', $keys), true);
+    }
+
+    public function isRowEffectivelyExpanded(int|string $recordKey): bool
+    {
+        return isset($this->treeEffectiveExpandedKeys[(string) $recordKey]);
+    }
+
+    public function setExpansionLocked(bool $locked): void
+    {
+        $this->treeExpansionLocked = $locked;
+    }
+
+    public function isExpansionLocked(): bool
+    {
+        return $this->treeExpansionLocked;
+    }
+
+    /**
+     * @param  array<int, int|string>  $keys
+     */
+    public function setContextKeys(array $keys): void
+    {
+        $this->treeContextKeys = array_fill_keys(array_map('strval', $keys), true);
+    }
+
+    public function isRowContext(int|string $recordKey): bool
+    {
+        return isset($this->treeContextKeys[(string) $recordKey]);
+    }
+
+    /**
+     * Skip the table's filter pass while the tree resolves an ancestor-inclusive view
+     * (it has already filtered and added ancestors). The variadic forwards any extra
+     * arguments so the override stays compatible across filament/tables ^4.0 and ^5.0.
+     */
+    protected function applyFiltersToTableQuery(Builder $query, mixed ...$args): Builder
+    {
+        if ($this->treeSuppressFilterApplication) {
+            return $query;
+        }
+
+        return parent::applyFiltersToTableQuery($query, ...$args);
+    }
+
+    protected function applySearchToTableQuery(Builder $query, mixed ...$args): Builder
+    {
+        if ($this->treeSuppressFilterApplication) {
+            return $query;
+        }
+
+        return parent::applySearchToTableQuery($query, ...$args);
     }
 
     /**

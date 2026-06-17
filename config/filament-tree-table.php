@@ -59,4 +59,18 @@ return [
     | its parent. (A relationship/computed sort column falls back to natural key order.)
     */
     'flatten_on_sort' => false,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Flatten on filter / search
+    |--------------------------------------------------------------------------
+    | Whether an active table filter or search drops the tree for a flat list.
+    | Search usually reads better flat (it spans every level). Set flatten_on_filter
+    | to false to keep the hierarchy while a filter is active — handy to permanently
+    | hide a subset (e.g. completed rows) without losing the tree. A filtered-out
+    | parent still drops its subtree.
+    */
+    'flatten_on_filter' => true,
+
+    'flatten_on_search' => true,
 ];

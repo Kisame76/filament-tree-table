@@ -10,6 +10,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
 use Kisame76\FilamentTreeTable\Concerns\InteractsWithExpandableRows;
 use Kisame76\FilamentTreeTable\Contracts\HasExpandableRows;
@@ -71,6 +72,21 @@ class ExpandableRows
 
     protected bool $flattenOnSort;
 
+    protected bool $flattenOnFilter;
+
+    protected bool $flattenOnSearch;
+
+    protected string|Closure|null $defaultSort = null;
+
+    protected string $defaultSortDirection = 'asc';
+
+    /**
+     * Guards against re-entering the tree query build. Resolving the ancestor-inclusive
+     * match set calls the host's filter pass, which can reach back into Table::getQuery()
+     * (e.g. via getModel()); without this the scope would recurse into itself.
+     */
+    protected bool $buildingTree = false;
+
     protected string $toggleColumnLabel = "\u{00A0}"; // nbsp: reorderableColumns() rejects blank labels.
 
     public function __construct()
@@ -84,6 +100,8 @@ class ExpandableRows
         $this->expandAllAction = (bool) config('filament-tree-table.expand_all_action', true);
         $this->collapseAllAction = (bool) config('filament-tree-table.collapse_all_action', true);
         $this->flattenOnSort = (bool) config('filament-tree-table.flatten_on_sort', false);
+        $this->flattenOnFilter = (bool) config('filament-tree-table.flatten_on_filter', true);
+        $this->flattenOnSearch = (bool) config('filament-tree-table.flatten_on_search', true);
     }
 
     public static function make(): static
@@ -177,6 +195,43 @@ class ExpandableRows
         return $this;
     }
 
+    /**
+     * Whether an active table filter drops the tree for a flat list. Off keeps the
+     * hierarchy while filtered — useful to permanently hide a subset (e.g. completed
+     * rows) without losing the tree. Filtered-out parents still drop their subtree.
+     */
+    public function flattenOnFilter(bool $condition = true): static
+    {
+        $this->flattenOnFilter = $condition;
+
+        return $this;
+    }
+
+    /**
+     * Whether an active table search drops the tree for a flat list. Usually wanted —
+     * a search spans every level, so a flat result reads better than a sparse tree.
+     */
+    public function flattenOnSearch(bool $condition = true): static
+    {
+        $this->flattenOnSearch = $condition;
+
+        return $this;
+    }
+
+    /**
+     * Default ordering for sibling rows when no column sort is active. Accepts a column
+     * name (ordered on the base table) or a Closure(Builder $query, string $direction)
+     * for full control — e.g. ordering by a related or computed value. Only the order
+     * within each sibling group changes; the hierarchy is preserved.
+     */
+    public function defaultSort(string|Closure|null $column, string $direction = 'asc'): static
+    {
+        $this->defaultSort = $column;
+        $this->defaultSortDirection = $direction;
+
+        return $this;
+    }
+
     public function toggleColumnLabel(string $label): static
     {
         $this->toggleColumnLabel = $label;
@@ -211,70 +266,272 @@ class ExpandableRows
             return $query;
         }
 
-        if ($this->isFlat($livewire)) {
-            $livewire->setRowDepthMap([]);
-
+        // Re-entered while already building the tree (the ancestor match pass reaches back
+        // into Table::getQuery() via the host's filter form). Hand back the plain query so
+        // the inner call resolves without recursing.
+        if ($this->buildingTree) {
             return $query;
         }
 
-        $model = $query->getModel();
-        $qualifiedKey = $model->getQualifiedKeyName();
-        $qualifiedParent = $model->qualifyColumn($this->parentKey);
+        $this->buildingTree = true;
 
-        // When the tree is kept (flatten_on_sort = false) an active column sort is applied
-        // to the lookup, so every sibling group follows that column while staying grouped
-        // under its parent (Jira-style hierarchical sort). Otherwise rows fall back to key
-        // order. Children come out in the same order as this fetch.
-        $pairsQuery = (clone $query)->reorder();
-        $this->applyTreeSort($pairsQuery, $model, $livewire);
+        try {
+            // Reset on every build; the ancestor-inclusive branch re-enables it as needed.
+            $livewire->setSuppressTableFilters(false);
 
-        $pairs = $pairsQuery
-            ->get([$qualifiedKey, $qualifiedParent])
-            ->map(fn (Model $record): array => [$record->getKey(), $record->getAttribute($this->parentKey)]);
+            if ($this->isFlat($livewire)) {
+                $livewire->setRowDepthMap([]);
+                $livewire->setEffectiveExpandedKeys($livewire->getExpandedRowKeys());
+                $livewire->setExpansionLocked(false);
+                $livewire->setContextKeys([]);
 
-        $tree = TreeBuilder::build($pairs, $livewire->getExpandedRowKeys());
+                return $query;
+            }
 
-        $livewire->setRowDepthMap($tree['depth']);
-        $livewire->setExpandableParentKeys($tree['parentsWithChildren']);
+            $model = $query->getModel();
+            $qualifiedKey = $model->getQualifiedKeyName();
+            $qualifiedParent = $model->qualifyColumn($this->parentKey);
 
-        if ($tree['ordered'] === []) {
-            return $query->whereRaw('1 = 0');
+            // When the tree is kept (flatten_on_sort = false) an active column sort is applied
+            // to the lookup, so every sibling group follows that column while staying grouped
+            // under its parent (Jira-style hierarchical sort). Otherwise rows fall back to key
+            // order. Children come out in the same order as this fetch.
+            $pairsQuery = (clone $query)->reorder();
+            $this->applyTreeSort($pairsQuery, $model, $livewire);
+
+            $pairs = $pairsQuery
+                ->get([$qualifiedKey, $qualifiedParent])
+                ->map(fn (Model $record): array => [$record->getKey(), $record->getAttribute($this->parentKey)]);
+
+            $expandedKeys = $livewire->getExpandedRowKeys();
+
+            // Ancestor-inclusive filtering: when the tree is kept while a filter/search is
+            // active, narrow to the matching rows, pull in their ancestors for context and
+            // auto-expand those ancestors so matches buried in collapsed branches surface.
+            // The tree applies the filters itself here, then suppresses the table's own pass
+            // so the (non-matching) ancestor rows are not stripped back out downstream.
+            $autoExpanded = $this->hasActiveSearch($livewire) || $this->hasActiveFilters($livewire);
+            $contextKeys = [];
+
+            if ($autoExpanded) {
+                [$pairs, $expandedKeys, $contextKeys] = $this->revealMatchesWithAncestors($query, $pairs, $expandedKeys, $livewire, $qualifiedKey);
+                $livewire->setSuppressTableFilters(true);
+            }
+
+            $tree = TreeBuilder::build($pairs, $expandedKeys);
+
+            $livewire->setRowDepthMap($tree['depth']);
+            $livewire->setExpandableParentKeys($tree['parentsWithChildren']);
+
+            // Reflect the keys actually expanded this render (incl. auto-expanded ancestors)
+            // so the chevrons match, lock manual expansion while a filter/search drives it,
+            // and dim the non-matching ancestors shown only as path context.
+            $livewire->setEffectiveExpandedKeys($expandedKeys);
+            $livewire->setExpansionLocked($autoExpanded);
+            $livewire->setContextKeys($contextKeys);
+
+            if ($tree['ordered'] === []) {
+                return $query->whereRaw('1 = 0');
+            }
+
+            $query
+                ->withCount($this->childrenRelationship)
+                ->whereKey($tree['ordered']);
+
+            return OrderByIds::applyTo($query, $qualifiedKey, $tree['ordered']);
+        } finally {
+            $this->buildingTree = false;
         }
-
-        $query
-            ->withCount($this->childrenRelationship)
-            ->whereKey($tree['ordered']);
-
-        return OrderByIds::applyTo($query, $qualifiedKey, $tree['ordered']);
     }
 
     /**
-     * Apply the active table sort to the tree lookup so every sibling group follows that
-     * column (parents and their children alike), keeping the tree grouping. A relationship
-     * or computed sort column (dotted name) is skipped — it cannot be ordered on the base
-     * table — leaving the natural key order. A key tiebreaker keeps siblings deterministic.
+     * Order the tree lookup so every sibling group follows the chosen order (parents and
+     * their children alike), keeping the tree grouping. An active column sort is delegated
+     * to the column itself, so ->sortable(query:) closures and relationship columns work
+     * exactly as on a flat table; otherwise the configured defaultSort() applies. A key
+     * tiebreaker keeps siblings deterministic.
      */
     protected function applyTreeSort(Builder $query, Model $model, HasExpandableRows $livewire): void
     {
-        $sortColumn = method_exists($livewire, 'getTableSortColumn') ? $livewire->getTableSortColumn() : null;
-
-        if (filled($sortColumn) && ! str_contains((string) $sortColumn, '.')) {
-            $direction = $livewire->getTableSortDirection() === 'desc' ? 'desc' : 'asc';
-            $query->orderBy($model->qualifyColumn($sortColumn), $direction);
+        if (! $this->applyActiveColumnSort($query, $livewire)) {
+            $this->applyDefaultSort($query, $model);
         }
 
         $query->orderBy($model->getQualifiedKeyName());
     }
 
+    /**
+     * Delegate sibling ordering to the active table column sort. Routing through the
+     * column's own applySort() honours ->sortable(query:) closures and relationship
+     * (dotted) columns — the same behaviour a flat Filament table gives. Returns false
+     * when there is no active, sortable, visible column to apply.
+     */
+    protected function applyActiveColumnSort(Builder $query, HasExpandableRows $livewire): bool
+    {
+        if (! method_exists($livewire, 'getTableSortColumn') || ! method_exists($livewire, 'getTable')) {
+            return false;
+        }
+
+        $sortColumn = $livewire->getTableSortColumn();
+
+        if (blank($sortColumn)) {
+            return false;
+        }
+
+        $column = $livewire->getTable()->getSortableVisibleColumn((string) $sortColumn);
+
+        if ($column === null) {
+            return false;
+        }
+
+        $direction = (method_exists($livewire, 'getTableSortDirection') && $livewire->getTableSortDirection() === 'desc')
+            ? 'desc'
+            : 'asc';
+
+        $column->applySort($query, $direction);
+
+        return true;
+    }
+
+    protected function applyDefaultSort(Builder $query, Model $model): void
+    {
+        if ($this->defaultSort instanceof Closure) {
+            ($this->defaultSort)($query, $this->defaultSortDirection);
+
+            return;
+        }
+
+        if (is_string($this->defaultSort)) {
+            $query->orderBy($model->qualifyColumn($this->defaultSort), $this->defaultSortDirection);
+        }
+    }
+
+    /**
+     * Narrow the pair list to the rows matching the active filter/search plus all of
+     * their ancestors, and expand those ancestors so the matches become visible. Matches
+     * are resolved by the table's own filter/search; the ancestor chain is then walked
+     * from the in-memory pair list (no extra per-row queries).
+     *
+     * @param  Collection<int, array{0: int|string, 1: int|string|null}>  $pairs
+     * @param  array<int, int|string>  $expandedKeys
+     * @return array{0: Collection<int, array{0: int|string, 1: int|string|null}>, 1: array<int, string>, 2: array<int, string>}
+     */
+    protected function revealMatchesWithAncestors(Builder $query, $pairs, array $expandedKeys, HasExpandableRows $livewire, string $qualifiedKey): array
+    {
+        $matchedKeys = $this->matchedKeys($query, $livewire, $qualifiedKey);
+
+        if ($matchedKeys === []) {
+            return [$pairs->take(0), $expandedKeys, []];
+        }
+
+        $parentOf = [];
+
+        foreach ($pairs as [$key, $parent]) {
+            $parentOf[(string) $key] = ($parent === null || $parent === '') ? null : (string) $parent;
+        }
+
+        $visible = array_fill_keys($matchedKeys, true);
+        $ancestors = [];
+
+        foreach ($matchedKeys as $matchedKey) {
+            $cursor = $parentOf[$matchedKey] ?? null;
+
+            while ($cursor !== null) {
+                $visible[$cursor] = true;
+                $alreadyWalked = isset($ancestors[$cursor]);
+                $ancestors[$cursor] = true;
+
+                if ($alreadyWalked) {
+                    break; // this chain is already walked up to its root
+                }
+
+                $cursor = $parentOf[$cursor] ?? null;
+            }
+        }
+
+        $pairs = $pairs->filter(fn (array $pair): bool => isset($visible[(string) $pair[0]]))->values();
+
+        $expandedKeys = array_values(array_unique([
+            ...array_map('strval', $expandedKeys),
+            ...array_keys($ancestors),
+        ]));
+
+        // Ancestors that are not themselves matches are shown only as path context.
+        $matched = array_fill_keys($matchedKeys, true);
+        $contextKeys = array_values(array_filter(
+            array_keys($ancestors),
+            fn (string $key): bool => ! isset($matched[$key]),
+        ));
+
+        return [$pairs, $expandedKeys, $contextKeys];
+    }
+
+    /**
+     * Primary keys of the rows matching the active filter/search. Suppression is lifted
+     * for this lookup so the table applies its filters/search normally.
+     *
+     * @return array<int, string>
+     */
+    protected function matchedKeys(Builder $query, HasExpandableRows $livewire, string $qualifiedKey): array
+    {
+        $livewire->setSuppressTableFilters(false);
+
+        $matchQuery = (clone $query)->reorder();
+
+        if (method_exists($livewire, 'filterTableQuery')) {
+            $livewire->filterTableQuery($matchQuery);
+        }
+
+        return array_map('strval', $matchQuery->get([$qualifiedKey])->modelKeys());
+    }
+
+    /**
+     * A plain tree is shown: not flattened and not driven by an active filter/search. Only
+     * then do manual expansion controls (per-row chevrons, expand/collapse-all) apply.
+     */
+    protected function isPlainTree(HasExpandableRows $livewire): bool
+    {
+        return ! $this->isFlat($livewire)
+            && ! $this->hasActiveSearch($livewire)
+            && ! $this->hasActiveFilters($livewire);
+    }
+
     protected function isFlat(HasExpandableRows $livewire): bool
     {
-        if ($livewire->isTreeTableFiltered()) {
+        if ($this->flattenOnSearch && $this->hasActiveSearch($livewire)) {
+            return true;
+        }
+
+        if ($this->flattenOnFilter && $this->hasActiveFilters($livewire)) {
             return true;
         }
 
         return $this->flattenOnSort
             && method_exists($livewire, 'getTableSortColumn')
             && filled($livewire->getTableSortColumn());
+    }
+
+    protected function hasActiveSearch(HasExpandableRows $livewire): bool
+    {
+        if (method_exists($livewire, 'getTableSearch') && filled($livewire->getTableSearch())) {
+            return true;
+        }
+
+        if (method_exists($livewire, 'getTableColumnSearches')) {
+            foreach ($livewire->getTableColumnSearches() as $columnSearch) {
+                if (filled($columnSearch)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    protected function hasActiveFilters(HasExpandableRows $livewire): bool
+    {
+        return method_exists($livewire, 'getTable')
+            && $livewire->getTable()->getFilterIndicators() !== [];
     }
 
     protected function toggleColumn(): TextColumn
@@ -330,11 +587,19 @@ class ExpandableRows
 
         $chevron = '';
         if ($hasChildren) {
-            $svg = $livewire->isRowExpanded($key) ? static::CHEVRON_DOWN : static::CHEVRON_RIGHT;
-            $arg = is_numeric($key) ? (string) $key : "'".addslashes((string) $key)."'";
-            $chevron = '<button type="button" class="ftt-chevron" aria-label="Toggle row"'
-                .' style="display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:inherit;cursor:pointer"'
-                .' wire:click.stop.prevent="toggleRowExpansion('.$arg.')">'.$svg.'</button>';
+            $svg = $livewire->isRowEffectivelyExpanded($key) ? static::CHEVRON_DOWN : static::CHEVRON_RIGHT;
+
+            if ($livewire->isExpansionLocked()) {
+                // An active filter/search drives expansion: show the state, but make it
+                // non-interactive so a manual toggle cannot disagree with what is rendered.
+                $chevron = '<span class="ftt-chevron" aria-hidden="true"'
+                    .' style="display:inline-flex;align-items:center;justify-content:center;opacity:.55">'.$svg.'</span>';
+            } else {
+                $arg = is_numeric($key) ? (string) $key : "'".addslashes((string) $key)."'";
+                $chevron = '<button type="button" class="ftt-chevron" aria-label="Toggle row"'
+                    .' style="display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:inherit;cursor:pointer"'
+                    .' wire:click.stop.prevent="toggleRowExpansion('.$arg.')">'.$svg.'</button>';
+            }
         }
 
         $arrow = ($this->cornerArrow && $depth > 0)
@@ -364,7 +629,8 @@ class ExpandableRows
         $classes = [];
 
         if ($livewire instanceof HasExpandableRows) {
-            $depth = $livewire->getRowDepth($this->keyOf($record));
+            $key = $this->keyOf($record);
+            $depth = $livewire->getRowDepth($key);
             $classes = ['ftt-row', 'ftt-depth-'.$depth, $depth > 0 ? 'ftt-child' : 'ftt-root'];
 
             if ($this->accentBar && $depth > 0) {
@@ -373,6 +639,11 @@ class ExpandableRows
 
             if ($this->depthTint) {
                 $classes[] = 'ftt-tint';
+            }
+
+            // Non-matching ancestor shown only as the path to a match — dim it as context.
+            if ($livewire->isRowContext($key)) {
+                $classes[] = 'ftt-context';
             }
         }
 
@@ -391,7 +662,7 @@ class ExpandableRows
             ->icon('heroicon-m-chevron-double-down')
             ->color('gray')
             ->action(fn ($livewire) => $livewire instanceof HasExpandableRows ? $livewire->expandAllRows() : null)
-            ->visible(fn ($livewire): bool => $livewire instanceof HasExpandableRows && ! $livewire->isTreeTableFiltered());
+            ->visible(fn ($livewire): bool => $livewire instanceof HasExpandableRows && $this->isPlainTree($livewire));
     }
 
     protected function buildCollapseAllAction(): Action
@@ -401,7 +672,7 @@ class ExpandableRows
             ->icon('heroicon-m-chevron-double-up')
             ->color('gray')
             ->action(fn ($livewire) => $livewire instanceof HasExpandableRows ? $livewire->collapseAllRows() : null)
-            ->visible(fn ($livewire): bool => $livewire instanceof HasExpandableRows && ! $livewire->isTreeTableFiltered());
+            ->visible(fn ($livewire): bool => $livewire instanceof HasExpandableRows && $this->isPlainTree($livewire));
     }
 
     protected function keyOf(Model $record): int|string
