@@ -1,0 +1,92 @@
+/*
+ * filament-tree-table — default sub-row styling.
+ *
+ * Two cues, mix or switch via ExpandableRows::cornerArrow() / accentBar() / depthTint():
+ *   - corner-arrow glyph on each child (rendered in the toggle cell)
+ *   - coloured accent bar on the child row's left edge
+ *   - optional per-depth background tint
+ *
+ * Everything is driven by CSS custom properties so consumers can re-theme without
+ * overriding rules:
+ *   --ftt-slot          width of one icon column in the marker grid (default 1.25rem)
+ *   --ftt-accent-color  the accent bar colour
+ *   --ftt-tint-color    colour mixed into the per-depth row background
+ */
+
+/* Toggle cell: a fixed-width icon grid (one slot per depth) so chevrons and corner
+   arrows line up perfectly column-by-column across every level. */
+.ftt-toggle {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.ftt-slot {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--ftt-slot, 1.25rem);
+}
+
+.ftt-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: currentColor;
+    opacity: 0.6;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.ftt-chevron:hover {
+    opacity: 1;
+    background-color: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.ftt-chevron svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.ftt-arrow {
+    display: inline-flex;
+    align-items: center;
+    color: currentColor;
+    opacity: 0.4;
+}
+
+.ftt-arrow svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Accent bar at the row's left edge (the first cell), on child rows only. Colour reads
+   --ftt-accent-color, falling back to the Filament panel primary (--primary-500). */
+.ftt-accent > td:first-child {
+    box-shadow: inset 3px 0 0 var(--ftt-accent-color, var(--primary-500, #3b82f6));
+}
+
+/* Per-depth background tint — child rows render lighter (dark-mode safe via color-mix). */
+.ftt-tint.ftt-depth-1 {
+    background-color: color-mix(in srgb, var(--ftt-tint-color, currentColor) 6%, transparent);
+}
+
+.ftt-tint.ftt-depth-2 {
+    background-color: color-mix(in srgb, var(--ftt-tint-color, currentColor) 9%, transparent);
+}
+
+.ftt-tint.ftt-depth-3 {
+    background-color: color-mix(in srgb, var(--ftt-tint-color, currentColor) 12%, transparent);
+}
+
+.ftt-tint.ftt-depth-4,
+.ftt-tint.ftt-depth-5,
+.ftt-tint.ftt-depth-6,
+.ftt-tint.ftt-depth-7,
+.ftt-tint.ftt-depth-8 {
+    background-color: color-mix(in srgb, var(--ftt-tint-color, currentColor) 15%, transparent);
+}
