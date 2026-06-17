@@ -2,6 +2,10 @@
 
 All notable changes to `filament-tree-table` will be documented in this file.
 
+## v1.1.0 - 2026-06-17
+
+- **Tree toggle column pinned first & hidden from the column manager** — the chevron column no longer shows up in the `toggleableColumns()` / `reorderableColumns()` panel (where it appeared as a nameless, draggable row) and can no longer be reordered or pushed to the back by a persisted column order. It always renders as the first column.
+
 ## v1.0.0 - 2026-06-17
 
 Initial release.
