@@ -1,8 +1,6 @@
-<!-- Banner — add an image (e.g. the GitHub social-preview URL) when publishing, then uncomment:
 <a href="https://github.com/Kisame76/filament-tree-table" class="filament-hidden">
-    <img src="REPLACE_WITH_BANNER_IMAGE_URL" alt="Filament Tree Table" style="width: 100%; max-width: 100%;" class="filament-hidden">
+    <img src="https://repository-images.githubusercontent.com/1272325875/8da5bceb-d314-41bd-9116-b9752a826776" alt="Filament Tree Table" style="width: 100%; max-width: 100%;" class="filament-hidden">
 </a>
--->
 
 # Filament Tree Table
 
@@ -130,9 +128,9 @@ All visuals are driven by CSS variables — override them in your panel theme:
 
 ```css
 .ftt-row {
-    --ftt-slot: 1.5rem;        /* width of each marker column (indent step) */
-    --ftt-accent-color: rgb(99 102 241 / 0.85);
-    --ftt-tint-color: rgb(99 102 241);
+  --ftt-slot: 1.5rem; /* width of each marker column (indent step) */
+  --ftt-accent-color: rgb(99 102 241 / 0.85);
+  --ftt-tint-color: rgb(99 102 241);
 }
 ```
 
