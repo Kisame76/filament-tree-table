@@ -1,7 +1,6 @@
 {
   "name": "kisame76/filament-tree-table",
-  "description": "Expandable parent/child tree rows for Filament v5 tables — inline sub-rows, search/filter aware, expand & collapse all.",
-  "version": "0.1.3",
+  "description": "Expandable parent/child tree rows for Filament v4 & v5 tables — inline sub-rows, search/filter aware, expand & collapse all.",
   "keywords": [
     "filament",
     "filamentphp",
