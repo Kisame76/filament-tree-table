@@ -30,8 +30,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # CI only: don't let an upstream Filament advisory block dependency resolution.
-          jq '.policy.advisories.block = false' composer.json > composer.tmp && mv composer.tmp composer.json
+          # CI only: don't let a transient upstream advisory block dependency resolution.
+          composer config policy.advisories.block false
           composer require "filament/filament:^${{ matrix.filament }}.0" --dev --no-interaction --no-update
           composer update --prefer-dist --no-interaction --no-progress
 
