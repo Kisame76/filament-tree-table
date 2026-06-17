@@ -147,8 +147,17 @@ All visuals are driven by CSS variables — override them in your panel theme:
   list. (A relationship/computed sort column falls back to natural order.)
 - **Stepping:** `grid(false)` removes the per-level indentation (flat rows); the hierarchy
   is then shown only by `accentBar`/`depthTint`. `grid` and `cornerArrow` are independent.
-- **`reorderableColumns()`** rejects blank column labels, so the toggle column uses a
-  non-breaking-space label by default (`->toggleColumnLabel('')` to change it).
+- **Column manager:** the chevron toggle column is kept out of the column-manager panel
+  (the `toggleableColumns()` / `reorderableColumns()` dropdown) and is always pinned as the
+  first column, so a persisted column order can never hide it or push it to the back. It
+  still carries a non-breaking-space label internally (`->toggleColumnLabel('…')` to change
+  it) because Filament rejects blank labels on reorderable columns — the label is no longer
+  shown anywhere. The pinning is done by `InteractsWithExpandableRows`, which overrides
+  Filament's `getDefaultTableColumnState()` / `updateTableColumns()`. On a List page,
+  relation manager, or table widget this just works (the base class supplies
+  `InteractsWithTable`). The only exception is a bare custom Livewire component that uses
+  `InteractsWithTable` and `InteractsWithExpandableRows` side by side — there, resolve the
+  trait conflict explicitly: `use InteractsWithTable, InteractsWithExpandableRows { InteractsWithExpandableRows::getDefaultTableColumnState insteadof InteractsWithTable; InteractsWithExpandableRows::updateTableColumns insteadof InteractsWithTable; }`.
 - Components that do **not** implement `HasExpandableRows` (e.g. a widget sharing the
   same `table()` definition) render completely flat — every wired behaviour self-disables.
 

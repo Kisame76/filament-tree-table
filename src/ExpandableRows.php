@@ -36,6 +36,13 @@ use Kisame76\FilamentTreeTable\Support\TreeBuilder;
  */
 class ExpandableRows
 {
+    /**
+     * Name of the prepended chevron/marker column. The host's
+     * {@see InteractsWithExpandableRows} trait keys off this to hide the column from the
+     * column manager panel and keep it pinned first.
+     */
+    public const TOGGLE_COLUMN_NAME = '__ftt_toggle';
+
     protected const CHEVRON_RIGHT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
 
     protected const CHEVRON_DOWN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
@@ -274,7 +281,7 @@ class ExpandableRows
     {
         $countAttribute = $this->childrenRelationship.'_count';
 
-        return TextColumn::make('__ftt_toggle')
+        return TextColumn::make(self::TOGGLE_COLUMN_NAME)
             ->label($this->toggleColumnLabel)
             ->html()
             ->width('1px')
