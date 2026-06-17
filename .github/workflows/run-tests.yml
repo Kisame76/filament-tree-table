@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -30,6 +30,8 @@ jobs:
 
       - name: Install dependencies
         run: |
+          # CI only: don't let an upstream Filament advisory block dependency resolution.
+          jq '.policy.advisories.block = false' composer.json > composer.tmp && mv composer.tmp composer.json
           composer require "filament/filament:^${{ matrix.filament }}.0" --dev --no-interaction --no-update
           composer update --prefer-dist --no-interaction --no-progress
 
