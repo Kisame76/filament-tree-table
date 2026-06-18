@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+*.md diff=markdown
+
+# Keep the installed (composer dist) package lean — these live on GitHub only.
+/.github            export-ignore
+/tests              export-ignore
+/.gitattributes     export-ignore
+/.gitignore         export-ignore
+/phpunit.xml.dist   export-ignore
+/CHANGELOG.md       export-ignore

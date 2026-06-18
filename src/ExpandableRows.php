@@ -76,6 +76,8 @@ class ExpandableRows
 
     protected bool $flattenOnSearch;
 
+    protected bool $paginateByRoot;
+
     protected string|Closure|null $defaultSort = null;
 
     protected string $defaultSortDirection = 'asc';
@@ -102,6 +104,7 @@ class ExpandableRows
         $this->flattenOnSort = (bool) config('filament-tree-table.flatten_on_sort', false);
         $this->flattenOnFilter = (bool) config('filament-tree-table.flatten_on_filter', true);
         $this->flattenOnSearch = (bool) config('filament-tree-table.flatten_on_search', true);
+        $this->paginateByRoot = (bool) config('filament-tree-table.paginate_by_root', false);
     }
 
     public static function make(): static
@@ -219,6 +222,21 @@ class ExpandableRows
     }
 
     /**
+     * Paginate by root node instead of by row, so a family (a root plus all of its
+     * currently visible descendants) is never split across a page boundary. Each page
+     * carries N roots — N being the per-page selection — and all their visible
+     * descendants, so the row count per page varies; the "Showing X to Y of Z" summary
+     * and the page count refer to roots. Off by default (rows are paginated as usual).
+     * No effect while the view is flattened (sort/filter/search) or pagination is off.
+     */
+    public function paginateByRoot(bool $condition = true): static
+    {
+        $this->paginateByRoot = $condition;
+
+        return $this;
+    }
+
+    /**
      * Default ordering for sibling rows when no column sort is active. Accepts a column
      * name (ordered on the base table) or a Closure(Builder $query, string $direction)
      * for full control — e.g. ordering by a related or computed value. Only the order
@@ -284,6 +302,9 @@ class ExpandableRows
                 $livewire->setEffectiveExpandedKeys($livewire->getExpandedRowKeys());
                 $livewire->setExpansionLocked(false);
                 $livewire->setContextKeys([]);
+                // A flat view has no roots to paginate by; fall back to row pagination.
+                $livewire->setOrderedKeys([]);
+                $livewire->setPaginateByRoot(false);
 
                 return $query;
             }
@@ -329,6 +350,11 @@ class ExpandableRows
             $livewire->setEffectiveExpandedKeys($expandedKeys);
             $livewire->setExpansionLocked($autoExpanded);
             $livewire->setContextKeys($contextKeys);
+
+            // Hand the depth-first key order to the host so it can paginate by root block
+            // (roots + their visible descendants) instead of by row when opted in.
+            $livewire->setOrderedKeys($tree['ordered']);
+            $livewire->setPaginateByRoot($this->paginateByRoot);
 
             if ($tree['ordered'] === []) {
                 return $query->whereRaw('1 = 0');
@@ -658,7 +684,7 @@ class ExpandableRows
     protected function buildExpandAllAction(): Action
     {
         return Action::make('expandAllRows')
-            ->label(__('Expand all'))
+            ->label(__('filament-tree-table::tree-table.actions.expand_all'))
             ->icon('heroicon-m-chevron-double-down')
             ->color('gray')
             ->action(fn ($livewire) => $livewire instanceof HasExpandableRows ? $livewire->expandAllRows() : null)
@@ -668,7 +694,7 @@ class ExpandableRows
     protected function buildCollapseAllAction(): Action
     {
         return Action::make('collapseAllRows')
-            ->label(__('Collapse all'))
+            ->label(__('filament-tree-table::tree-table.actions.collapse_all'))
             ->icon('heroicon-m-chevron-double-up')
             ->color('gray')
             ->action(fn ($livewire) => $livewire instanceof HasExpandableRows ? $livewire->collapseAllRows() : null)

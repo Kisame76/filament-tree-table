@@ -2,6 +2,17 @@
 
 All notable changes to `filament-tree-table` will be documented in this file.
 
+## v1.3.0 - 2026-06-18
+
+### Added
+
+- **`paginateByRoot()`** — paginate by **root node** instead of by row, so a family (a root plus all of its currently visible descendants) is never split across a page boundary. Each page carries N roots (the per-page selection) plus all their visible descendants, so the row count per page varies; "Showing X to Y of Z" and the page count refer to roots. Off by default (`paginate_by_root` config key) to preserve the existing per-row pagination. No effect while the view is flattened (sort/filter/search), under a non-default pagination mode, or with `->paginated(false)`.
+- **Translations** — the expand-all / collapse-all action labels are now translatable, with English (`en`) and German (`de`) included. Publish the language files with `php artisan vendor:publish --tag="filament-tree-table-translations"` to add or override locales.
+
+### Note
+
+- The `HasExpandableRows` contract gained `setOrderedKeys()` and `setPaginateByRoot()` (used by the tree internals). Implementations using the `InteractsWithExpandableRows` trait — the documented setup — get them automatically and need no changes.
+
 ## v1.2.0 - 2026-06-17
 
 ### Added

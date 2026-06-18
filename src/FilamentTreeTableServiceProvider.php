@@ -20,7 +20,8 @@ class FilamentTreeTableServiceProvider extends PackageServiceProvider
     {
         $package
             ->name(static::$name)
-            ->hasConfigFile();
+            ->hasConfigFile()
+            ->hasTranslations();
     }
 
     public function packageBooted(): void

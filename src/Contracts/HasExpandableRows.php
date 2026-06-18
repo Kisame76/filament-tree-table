@@ -90,4 +90,19 @@ interface HasExpandableRows
     public function setContextKeys(array $keys): void;
 
     public function isRowContext(int|string $recordKey): bool;
+
+    /**
+     * The depth-first ordered list of visible row keys for the current render. The tree
+     * uses it to slice pagination by root (each root and its visible descendants form one
+     * block), so families are not split across page boundaries.
+     *
+     * @param  array<int, int|string>  $keys
+     */
+    public function setOrderedKeys(array $keys): void;
+
+    /**
+     * Whether the current build should paginate by root node rather than by row. Mirrors
+     * the {@see ExpandableRows::paginateByRoot()} option for the build in progress.
+     */
+    public function setPaginateByRoot(bool $paginateByRoot): void;
 }

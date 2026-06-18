@@ -5,10 +5,16 @@ declare(strict_types=1);
 namespace Kisame76\FilamentTreeTable\Concerns;
 
 use Filament\Tables\Columns\Column;
+use Filament\Tables\Concerns\CanPaginateRecords;
 use Filament\Tables\Concerns\HasColumnManager;
+use Filament\Tables\Enums\PaginationMode;
+use Illuminate\Contracts\Pagination\CursorPaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Pagination\Paginator as ConcretePaginator;
 use Kisame76\FilamentTreeTable\Contracts\HasExpandableRows;
 use Kisame76\FilamentTreeTable\ExpandableRows;
+use Kisame76\FilamentTreeTable\Support\RootPaginator;
 
 /**
  * Drop-in implementation of {@see HasExpandableRows}
@@ -78,6 +84,24 @@ trait InteractsWithExpandableRows
      * @var array<string, true>
      */
     protected array $treeContextKeys = [];
+
+    /**
+     * Depth-first ordered list of the visible row keys for the current render (the tree's
+     * `ordered` output). Each depth-0 key starts a root block that runs until the next
+     * depth-0 key; {@see paginateTableQuery()} slices these blocks to paginate by root.
+     * Render-scoped, normalised to strings.
+     *
+     * @var array<int, string>
+     */
+    protected array $treeOrderedKeys = [];
+
+    /**
+     * Whether the current build should paginate by root node rather than by row, so a
+     * family is never split across a page boundary. Mirrors the {@see ExpandableRows}
+     * `paginateByRoot()` option; off (and for any flattened view) it falls back to the
+     * stock row pagination. Render-scoped.
+     */
+    protected bool $treePaginateByRoot = false;
 
     public function toggleRowExpansion(int|string $recordKey): void
     {
@@ -201,6 +225,105 @@ trait InteractsWithExpandableRows
     public function isRowContext(int|string $recordKey): bool
     {
         return isset($this->treeContextKeys[(string) $recordKey]);
+    }
+
+    /**
+     * @param  array<int, int|string>  $keys
+     */
+    public function setOrderedKeys(array $keys): void
+    {
+        $this->treeOrderedKeys = array_values(array_map('strval', $keys));
+    }
+
+    public function setPaginateByRoot(bool $paginateByRoot): void
+    {
+        $this->treePaginateByRoot = $paginateByRoot;
+    }
+
+    /**
+     * Paginate by root node instead of by row, so a family (a root plus all of its
+     * currently visible descendants) is never split across a page boundary.
+     *
+     * Each page carries N roots — N being the per-page selection — plus every visible
+     * descendant of those roots, so a page holds a variable number of rows. The
+     * "Showing X to Y of Z" summary and the page count refer to roots (see
+     * {@see RootPaginator}). When pagination-by-root is off, or the view is flattened
+     * (sort/filter/search), or a non-default pagination mode is in use, the stock row
+     * pagination is used unchanged.
+     *
+     * Overrides {@see CanPaginateRecords::paginateTableQuery()},
+     * present across filament/tables ^4.0 and ^5.0.
+     */
+    protected function paginateTableQuery(Builder $query): Paginator|CursorPaginator
+    {
+        if (! $this->treePaginateByRoot || $this->treeOrderedKeys === []) {
+            return parent::paginateTableQuery($query);
+        }
+
+        // Root-block maths only fits the default length-aware paginator (it needs a total
+        // and a page count). Simple/cursor modes keep the stock per-row behaviour.
+        if ($this->getTable()->getPaginationMode() !== PaginationMode::Default) {
+            return parent::paginateTableQuery($query);
+        }
+
+        $blocks = $this->treeRootBlocks();
+        $totalRoots = count($blocks);
+
+        $perPage = $this->getTableRecordsPerPage();
+        $perPageRoots = is_numeric($perPage) ? max((int) $perPage, 1) : max($totalRoots, 1);
+
+        $page = (int) $this->getTablePage();
+
+        $pageBlocks = array_slice($blocks, ($page - 1) * $perPageRoots, $perPageRoots);
+        $pageKeys = $pageBlocks === [] ? [] : array_merge(...$pageBlocks);
+
+        $records = $pageKeys === []
+            ? $query->getModel()->newCollection()
+            : (clone $query)->whereKey($pageKeys)->get();
+
+        $paginator = new RootPaginator(
+            $records,
+            $totalRoots,
+            $perPageRoots,
+            $page,
+            [
+                'path' => ConcretePaginator::resolveCurrentPath(),
+                'pageName' => $this->getTablePaginationPageName(),
+            ],
+        );
+
+        return $paginator
+            ->setRootsOnPage(count($pageBlocks))
+            ->onEachSide(0);
+    }
+
+    /**
+     * Split the ordered key list into root blocks: each depth-0 key opens a new block
+     * and every following key (its visible descendants) joins it until the next depth-0
+     * key. Order is preserved, so slicing the blocks slices whole families.
+     *
+     * @return array<int, array<int, string>>
+     */
+    protected function treeRootBlocks(): array
+    {
+        $depthMap = $this->treeRowDepthMap;
+
+        /** @var array<int, array<int, string>> $blocks */
+        $blocks = [];
+        $index = -1;
+
+        foreach ($this->treeOrderedKeys as $key) {
+            // A new block starts at every root; the `$index === -1` guard also opens one
+            // for a leading non-root key, which should not occur but must never be dropped.
+            if (($depthMap[$key] ?? 0) === 0 || $index === -1) {
+                $index++;
+                $blocks[$index] = [];
+            }
+
+            $blocks[$index][] = $key;
+        }
+
+        return $blocks;
     }
 
     /**

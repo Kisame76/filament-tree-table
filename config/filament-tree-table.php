@@ -73,4 +73,17 @@ return [
     'flatten_on_filter' => true,
 
     'flatten_on_search' => true,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Paginate by root
+    |--------------------------------------------------------------------------
+    | When true, pagination operates on root nodes instead of rows: each page holds
+    | N roots (the per-page selection) plus all of their currently visible descendants,
+    | so a family is never split across a page boundary. The row count per page then
+    | varies, and "Showing X to Y of Z" plus the page count refer to roots. Off keeps
+    | the stock per-row pagination. No effect while the view is flattened
+    | (sort/filter/search) or pagination is disabled.
+    */
+    'paginate_by_root' => false,
 ];

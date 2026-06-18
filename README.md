@@ -18,6 +18,7 @@ rows — search and filter stay correct, and you get expand-all / collapse-all b
 - ✅ Custom sibling ordering — `defaultSort()` plus full `->sortable(query: ...)` / relationship-column support inside the tree
 - ✅ Clear sub-rows without forcing an icon convention: a corner-arrow glyph on children and/or a coloured accent bar (+ optional per-depth tint) — mix or switch, fully themeable
 - ✅ Expand-all / collapse-all header actions
+- ✅ Optional **pagination by root** — keep each family on one page instead of splitting parents and children across page boundaries (`paginateByRoot()`)
 - ✅ Database-agnostic ordering (Postgres / MySQL / SQLite)
 - ✅ No stored `level`/depth column required — depth is derived from `parent_id`
 
@@ -120,12 +121,25 @@ ExpandableRows::make()
     ->flattenOnSort(false)                          // false (default): sort hierarchically, keep tree; true: flat sorted list
     ->flattenOnFilter(true)                         // true (default): a filter flattens the tree; false: keep the tree + reveal matches with ancestors
     ->flattenOnSearch(true)                         // true (default): a search flattens the tree; false: keep the tree + reveal matches with ancestors
+    ->paginateByRoot(false)                         // false (default): paginate by row; true: paginate by root so families never split across pages
     ->defaultSort('sort')                           // default sibling order: a column name...
     ->defaultSort(fn ($query, $direction) => $query->orderBy('sort', $direction)) // ...or a closure (order by a related/computed value)
     ->applyTo($table);
 ```
 
 Project-wide defaults live in `config/filament-tree-table.php`.
+
+### Translations
+
+The expand-all / collapse-all action labels are translatable. English (`en`) and German
+(`de`) ship with the package; publish the language files to add or override locales:
+
+```bash
+php artisan vendor:publish --tag="filament-tree-table-translations"
+```
+
+This writes `lang/vendor/filament-tree-table/{locale}/tree-table.php`, where each locale
+defines `actions.expand_all` and `actions.collapse_all`.
 
 ### Theming
 
@@ -148,8 +162,14 @@ All visuals are driven by CSS variables — override them in your panel theme:
   non-matching ancestors are dimmed via the `.ftt-context` class (style it in your theme).
   While a filter/search drives the expansion the chevrons are non-interactive and the
   expand/collapse-all actions hide, so the displayed state can't be toggled out of sync.
-- **Pagination** counts the visible tree rows; page sizes shift as you expand, and a
-  branch can span a page boundary. For very deep trees consider `->paginated(false)`.
+- **Pagination:** by default the page counts visible tree *rows*, so page sizes shift as
+  you expand and a branch can span a page boundary (a parent on one page, its children on
+  the next). Enable `->paginateByRoot()` to paginate by **root** instead: each page holds
+  N roots (the per-page selection) plus *all* of their currently visible descendants, so a
+  family is never split — the row count per page then varies, and "Showing X to Y of Z"
+  and the page count refer to roots. It is a no-op while the view is flattened
+  (sort/filter/search), under a non-default pagination mode, or with `->paginated(false)`.
+  For very deep trees you can also disable pagination entirely with `->paginated(false)`.
 - **Sorting:** a column sort is delegated to the column itself, so `->sortable(query: ...)`
   closures and relationship/computed columns order the tree exactly as they would a flat
   table. Use `defaultSort()` for the sibling order when no column sort is active. With
@@ -168,7 +188,7 @@ All visuals are driven by CSS variables — override them in your panel theme:
   relation manager, or table widget this just works (the base class supplies
   `InteractsWithTable`). The only exception is a bare custom Livewire component that uses
   `InteractsWithTable` and `InteractsWithExpandableRows` side by side — there, resolve the
-  trait conflict explicitly: `use InteractsWithTable, InteractsWithExpandableRows { InteractsWithExpandableRows::getDefaultTableColumnState insteadof InteractsWithTable; InteractsWithExpandableRows::updateTableColumns insteadof InteractsWithTable; }`.
+  trait conflict explicitly: `use InteractsWithTable, InteractsWithExpandableRows { InteractsWithExpandableRows::getDefaultTableColumnState insteadof InteractsWithTable; InteractsWithExpandableRows::updateTableColumns insteadof InteractsWithTable; InteractsWithExpandableRows::paginateTableQuery insteadof InteractsWithTable; }`.
 - Components that do **not** implement `HasExpandableRows` (e.g. a widget sharing the
   same `table()` definition) render completely flat — every wired behaviour self-disables.
 
