@@ -38,6 +38,10 @@ class TestCase extends Orchestra
 
     protected function getEnvironmentSetUp($app): void
     {
+        // Filament's rendered views touch the encrypter, so a table that is drawn needs a key.
+        // Test-only; it protects nothing.
+        $app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('t', 32)));
+
         $app['config']->set('view.paths', [
             ...$app['config']->get('view.paths', []),
             __DIR__.'/Fixtures/views',

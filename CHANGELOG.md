@@ -2,6 +2,19 @@
 
 All notable changes to `filament-tree-table` will be documented in this file.
 
+## Unreleased
+
+### Changed
+
+- **Requires Filament 4.3 or newer on the v4 line** (`^4.3||^5.0`, was `^4.0||^5.0`). The column-manager tests exercise the toggle column against `Table::persistColumnsInSession()`, which Filament only added in 4.3.0, so the suite does not run on 4.0 to 4.2 and 4.3 is the oldest version actually tested. Filament 5 is unaffected, and Composer already installs the newest 4.x for anyone upgrading.
+
+### Added
+
+- `SECURITY.md` with a reporting address and the scope worth reviewing.
+- Tests that mount a table through Livewire and draw it, so the toggle column, the chevrons, the expand-all and collapse-all actions and search are exercised through Filament's own rendering. The existing tests read the query only and never rendered a row.
+- A release workflow: pushing a `v*` tag publishes the GitHub release, with the notes taken from the matching section of this file. A tag without a section fails instead of publishing an empty release.
+- CI now runs the suite on PHP 8.2 to 8.5 against Laravel 11, 12 and 13 and Filament 4 and 5, plus one run on the lowest versions Composer allows. Workflow actions are pinned to commit SHAs and kept current by Dependabot.
+
 ## v1.3.0 - 2026-06-18
 
 ### Added

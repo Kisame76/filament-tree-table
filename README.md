@@ -9,7 +9,7 @@
 [![Tests](https://img.shields.io/github/actions/workflow/status/Kisame76/filament-tree-table/run-tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/Kisame76/filament-tree-table/actions/workflows/run-tests.yml)
 [![Total Downloads](https://img.shields.io/packagist/dt/kisame76/filament-tree-table.svg?style=flat-square)](https://packagist.org/packages/kisame76/filament-tree-table)
 
-Expandable parent/child **tree rows** for Filament v4 & v5 tables. Show only top-level
+Expandable parent/child **tree rows** for Filament v4.3+ & v5 tables. Show only top-level
 parents, expand them with a chevron, and render the sub-rows inline as real table
 rows — search and filter stay correct, and you get expand-all / collapse-all buttons.
 
@@ -25,7 +25,7 @@ rows — search and filter stay correct, and you get expand-all / collapse-all b
 ## Requirements
 
 - PHP 8.2+
-- Filament v4 or v5
+- Filament v4.3+ or v5
 
 ## Installation
 
@@ -191,6 +191,10 @@ All visuals are driven by CSS variables — override them in your panel theme:
   trait conflict explicitly: `use InteractsWithTable, InteractsWithExpandableRows { InteractsWithExpandableRows::getDefaultTableColumnState insteadof InteractsWithTable; InteractsWithExpandableRows::updateTableColumns insteadof InteractsWithTable; InteractsWithExpandableRows::paginateTableQuery insteadof InteractsWithTable; }`.
 - Components that do **not** implement `HasExpandableRows` (e.g. a widget sharing the
   same `table()` definition) render completely flat — every wired behaviour self-disables.
+
+## Security
+
+Security reports go to the address in [SECURITY.md](SECURITY.md), never to the issue tracker.
 
 ## License
 

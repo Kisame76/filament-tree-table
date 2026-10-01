@@ -9,3 +9,4 @@
 /.gitignore         export-ignore
 /phpunit.xml.dist   export-ignore
 /CHANGELOG.md       export-ignore
+/SECURITY.md        export-ignore

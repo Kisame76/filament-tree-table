@@ -1,6 +1,6 @@
 {
   "name": "kisame76/filament-tree-table",
-  "description": "Expandable parent/child tree rows for Filament v4 & v5 tables — inline sub-rows, search/filter aware, expand & collapse all.",
+  "description": "Expandable parent/child tree rows for Filament v4.3+ & v5 tables — inline sub-rows, search/filter aware, expand & collapse all.",
   "keywords": [
     "filament",
     "filamentphp",
@@ -15,7 +15,8 @@
   "license": "MIT",
   "support": {
     "issues": "https://github.com/Kisame76/filament-tree-table/issues",
-    "source": "https://github.com/Kisame76/filament-tree-table"
+    "source": "https://github.com/Kisame76/filament-tree-table",
+    "security": "https://github.com/Kisame76/filament-tree-table/blob/main/SECURITY.md"
   },
   "authors": [
     {
@@ -26,16 +27,16 @@
   ],
   "require": {
     "php": "^8.2",
-    "filament/actions": "^4.0||^5.0",
-    "filament/support": "^4.0||^5.0",
-    "filament/tables": "^4.0||^5.0",
+    "filament/actions": "^4.3||^5.0",
+    "filament/support": "^4.3||^5.0",
+    "filament/tables": "^4.3||^5.0",
     "illuminate/contracts": "^11.0||^12.0||^13.0",
     "illuminate/database": "^11.0||^12.0||^13.0",
     "illuminate/support": "^11.0||^12.0||^13.0",
     "spatie/laravel-package-tools": "^1.16"
   },
   "require-dev": {
-    "filament/filament": "^4.0||^5.0",
+    "filament/filament": "^4.3||^5.0",
     "larastan/larastan": "^3.0",
     "laravel/pint": "^1.0",
     "orchestra/testbench": "^9.0||^10.0||^11.0",
