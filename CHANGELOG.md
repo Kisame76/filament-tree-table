@@ -2,7 +2,7 @@
 
 All notable changes to `filament-tree-table` will be documented in this file.
 
-## Unreleased
+## v1.3.1 - 2026-10-01
 
 ### Changed
 
